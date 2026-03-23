@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Asset Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #070b0e;
+            --bg-secondary: #0d1318;
+            --bg-tertiary: #111920;
+            --card: #151d26;
+            --card-hover: #1a2633;
+            --border: #1e2d3d;
+            --border-light: #2a3f52;
+            --fg: #e4eff7;
+            --fg-muted: #5a7a94;
+            --accent: #00e5a0;
+            --accent-dim: #00b37d;
+            --accent-glow: rgba(0, 229, 160, 0.15);
+            --warning: #f5a623;
+            --danger: #ff4d6a;
+            --info: #3b9eff;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 80% 50% at 20% 0%, rgba(0, 229, 160, 0.06) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 90% 100%, rgba(59, 158, 255, 0.04) 0%, transparent 50%),
+                linear-gradient(180deg, var(--bg) 0%, var(--bg-secondary) 100%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--fg-muted); }
+
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 320px;
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border-right: 1px solid var(--border);
+            z-index: 100;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Tree styles */
+        .tree-node {
+            padding: 10px 14px;
+            margin: 2px 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+        }
+
+        .tree-node:hover {
+            background: var(--card);
+            border-left-color: var(--border-light);
+        }
+
+        .tree-node.selected {
+            background: var(--accent-glow);
+            border-left-color: var(--accent);
+        }
+
+        .tree-children {
+            margin-left: 16px;
+            overflow: hidden;
+            max-height: 0;
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .tree-children.expanded {
+            max-height: 5000px;
+            opacity: 1;
+        }
+        
+        .tree-node-wrapper.hidden-node {
+            display: none;
+        }
+
+        /* Inverter Cards */
+        .inverter-card {
+            background: linear-gradient(145deg, var(--card) 0%, rgba(21, 29, 38, 0.7) 100%);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 18px;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .inverter-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--accent), transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .inverter-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--border-light);
+        }
+
+        .inverter-card:hover::before { opacity: 1; }
+
+        .inverter-card.selected {
+            border-color: var(--accent);
+            background: linear-gradient(145deg, var(--card-hover) 0%, rgba(26, 38, 51, 0.9) 100%);
+        }
+
+        .inverter-card.selected::before { opacity: 1; }
+        
+        .inverter-card.loading {
+            border-color: var(--warning);
+        }
+        
+        .inverter-card.loading::before {
+            background: linear-gradient(90deg, var(--warning), transparent 70%);
+            opacity: 1;
+        }
+
+        /* Datapoint Cards */
+        .datapoint-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.25s ease;
+            opacity: 0;
+            transform: translateY(16px) scale(0.95);
+            animation: datapointReveal 0.4s ease forwards;
+        }
+
+        .datapoint-card:hover {
+            border-color: var(--accent-dim);
+            background: var(--card-hover);
+        }
+
+        .datapoint-card.has-data::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 3px;
+            height: 100%;
+            background: var(--accent);
+        }
+
+        @keyframes datapointReveal {
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        
+        /* Inverter Data Section (Grouping) */
+        .inverter-data-section {
+            margin-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1.5rem;
+        }
+        .inverter-data-section:last-child {
+            border-bottom: none;
+        }
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 1rem;
+        }
+        .section-line {
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, var(--border) 10%, transparent 100%);
+        }
+
+        /* Custom Checkbox */
+        .custom-checkbox {
+            width: 22px;
+            height: 22px;
+            border: 2px solid var(--border-light);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .custom-checkbox.checked {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .custom-checkbox svg {
+            opacity: 0;
+            transform: scale(0);
+            transition: all 0.2s ease;
+        }
+
+        .custom-checkbox.checked svg {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* Spinner */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        
+        .mini-spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--border);
+            border-top-color: var(--warning);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Pulse dot */
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            position: relative;
+        }
+
+        .pulse-dot::before {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: pulseRing 2s ease-out infinite;
+        }
+
+        @keyframes pulseRing {
+            0% { transform: scale(0.8); opacity: 0.6; }
+            100% { transform: scale(2); opacity: 0; }
+        }
+
+        /* Level indicators */
+        .level-root { color: var(--accent); }
+        .level-site { color: var(--warning); }
+        .level-inverter { color: var(--fg-muted); }
+
+        /* Mobile menu */
+        .mobile-toggle {
+            display: none;
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            z-index: 150;
+            width: 44px;
+            height: 44px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .mobile-toggle:hover { background: var(--card-hover); }
+
+        @media (max-width: 1024px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .mobile-toggle { display: flex; }
+            .main-content { margin-left: 0 !important; }
+            .app-footer { left: 0 !important; }
+        }
+
+        @media (max-width: 640px) {
+            .sidebar { width: 100%; }
+        }
+
+        /* Chevron */
+        .chevron-icon { transition: transform 0.25s ease; }
+        .chevron-icon.rotated { transform: rotate(90deg); }
+
+        /* Stats card */
+        .stat-badge {
+            background: rgba(0, 229, 160, 0.1);
+            border: 1px solid rgba(0, 229, 160, 0.2);
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 12px;
+            color: var(--accent);
+        }
+
+        /* Glass overlay */
+        .glass-overlay {
+            background: rgba(7, 11, 14, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+
+        /* Entry animations */
+        .fade-in-up { animation: fadeInUp 0.5s ease forwards; }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Breadcrumbs */
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--fg-muted);
+            margin-bottom: 4px;
+        }
+        .breadcrumb span {
+            transition: color 0.2s;
+        }
+        .breadcrumb span:hover {
+            color: var(--fg);
+            cursor: pointer;
+        }
+        .breadcrumb span.active {
+            color: var(--fg);
+            font-weight: 600;
+        }
+        
+        /* Footer - Fixed */
+        .app-footer {
+            position: fixed;
+            bottom: 0;
+            left: 320px; 
+            right: 0;
+            padding: 1rem 1.5rem;
+            text-align: center;
+            border-top: 1px solid var(--border);
+            background: rgba(13, 19, 24, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            font-size: 0.875rem;
+            color: var(--fg-muted);
+            z-index: 90;
+            transition: left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .app-footer a {
+            color: var(--accent);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .app-footer a:hover {
+            color: var(--fg);
+            text-decoration: underline;
+        }
+
+        .main-content {
+            padding-bottom: 80px; 
+        }
+
+        /* Selection Dropdown */
+        .selection-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 8px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+            z-index: 50;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+        }
+        
+        .selection-dropdown.open {
+            display: block;
+        }
+        
+        .selection-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.2s;
+        }
+        
+        .selection-item:last-child {
+            border-bottom: none;
+        }
+        
+        .selection-item:hover {
+            background: var(--card);
+        }
+        
+        .remove-selection-btn {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            background: rgba(255, 77, 106, 0.1);
+            border: 1px solid rgba(255, 77, 106, 0.2);
+            color: var(--danger);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .remove-selection-btn:hover {
+            background: var(--danger);
+            color: white;
+        }
+
+        /* Reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile Toggle -->
+    <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle sidebar">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+    </button>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="p-5 border-b border-[var(--border)]">
+            <div class="flex items-center gap-3">
+                <!-- Replaced Text with Image -->
+                <img src="static/img/SustainTechExpertsLogo-TBG.svg" alt="SustainTech Experts Logo" class="h-10 w-auto object-contain" onerror="this.style.display='none'">
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight">SolarGrid</h1>
+                    <p class="text-xs text-[var(--fg-muted)]">Asset Monitor</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-4">
+            <div class="relative">
+                <input type="text" id="searchInput" placeholder="Search ID or Site..." 
+                    class="w-full bg-[var(--card)] border border-[var(--border)] rounded-lg px-4 py-2.5 pl-10 text-sm focus:outline-none focus:border-[var(--accent)] transition-colors">
+                <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--fg-muted)]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-2 pb-4" id="assetTree"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content ml-[320px] min-h-screen relative z-10 flex flex-col">
+        <!-- Navbar -->
+        <nav class="sticky top-0 glass-overlay border-b border-[var(--border)] px-6 py-4 z-50">
+            <div class="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                    <div class="breadcrumb hidden" id="breadcrumb"></div>
+                    <h2 class="text-xl font-semibold" id="pageTitle">Select an Asset</h2>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div id="queueStatus" class="text-sm text-[var(--fg-muted)] hidden items-center gap-2">
+                         <div class="mini-spinner"></div>
+                         <span>Processing...</span>
+                    </div>
+                    <div class="flex items-center gap-2 px-3 py-1.5 bg-[var(--card)] rounded-full border border-[var(--border)]">
+                        <span class="pulse-dot"></span>
+                        <span class="text-sm font-medium">Live</span>
+                    </div>
+                    <div class="h-8 w-auto">
+                        <img src="static/img/companyLogo.svg" alt="Company Logo" class="h-full w-auto object-contain" onerror="this.style.display='none'">
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <div class="p-6 flex-1">
+            <!-- Selection Info -->
+            <div id="selectionBar" class="mb-6 hidden fade-in-up relative">
+                <div class="flex items-center justify-between flex-wrap gap-3 p-4 bg-[var(--card)] border border-[var(--border)] rounded-xl cursor-pointer" id="selectionHeader">
+                    <div class="flex items-center gap-3">
+                        <span class="stat-badge" id="selectedCount">0 selected</span>
+                        <span class="text-sm text-[var(--fg-muted)]">inverters in queue (Click to manage)</span>
+                    </div>
+                    <button id="clearSelectionBtn" class="text-sm text-[var(--fg-muted)] hover:text-[var(--danger)] transition-colors flex items-center gap-1 relative z-10" onclick="event.stopPropagation();">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                        Clear All
+                    </button>
+                </div>
+                
+                <!-- Dropdown for selected items -->
+                <div class="selection-dropdown" id="selectionDropdown">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Inverter Grid -->
+            <div id="inverterGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8"></div>
+
+            <!-- Datapoints Section -->
+            <section id="datapointsSection" class="hidden">
+                <div class="flex items-center gap-3 mb-4">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                        <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
+                    </svg>
+                    <h3 class="text-lg font-semibold">Timeseries Data</h3>
+                    <span class="stat-badge" id="datapointCount">0 points</span>
+                </div>
+                <div id="datapointsContainer"></div>
+            </section>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="flex flex-col items-center justify-center py-24 text-center">
+                <div class="w-24 h-24 rounded-2xl bg-[var(--card)] border border-[var(--border)] flex items-center justify-center mb-5">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--fg-muted)" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="4"/>
+                        <path d="M12 2v2"/><path d="M12 20v2"/>
+                        <path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/>
+                        <path d="M2 12h2"/><path d="M20 12h2"/>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-semibold mb-2">No Asset Selected</h3>
+                <p class="text-[var(--fg-muted)] text-sm max-w-md leading-relaxed">
+                    Browse the asset hierarchy on the left and select a site or inverter to view available data points.
+                </p>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loadingState" class="hidden flex flex-col items-center justify-center py-24">
+                <div class="spinner w-12 h-12 mb-4"></div>
+                <p class="text-[var(--fg-muted)]">Loading assets...</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Fixed Footer -->
+    <footer class="app-footer">
+        <a href="https://stexperts.com/" target="_blank" rel="noopener noreferrer">
+            Indian Tech, Indian Servers, Indian Integrity proudly engineered by sustaintech private limited
+        </a>
+    </footer>
+
+    <script>
+        // ============ MAPPING DICTIONARIES ============
+        const FIELD_MAPPINGS = {
+            'ksolare': {
+                "oP": "Output Power", "oS": "Output Status", "oQ": "Output Reactive Power", "oPF": "Output PF",
+                "qd": "Q Pf Direction",
+                "mP": "Meter Power", "eT": "Energy Today", "eTtl": "Energy Total (U32)", "hTtl": "Hours Total",
+                "iS": "Inverter State", "wt": "Waiting Time", "fC": "Fault Code", "wC": "Warning Code",
+                "p1V": "PV1 Voltage", "p1A": "PV1 Current",
+                "p2V": "PV2 Voltage", "p2A": "PV2 Current",
+                "p3V": "PV3 Voltage", "p3A": "PV3 Current",
+                "p4V": "PV4 Voltage", "p4A": "PV4 Current",
+                "gRV": "Grid R Voltage", "gRA": "Grid R Current",
+                "gSV": "Grid S Voltage", "gSA": "Grid S Current",
+                "gTV": "Grid T Voltage", "gTA": "Grid T Current",
+                "gRS": "Grid RS Voltage", "gST": "Grid ST Voltage", "gTR": "Grid TR Voltage",
+                "gF": "Grid Frequency",
+                "eTtlF": "Energy Total (Float)", "impE": "Import Energy", "expE": "Export Energy"
+            },
+            'thea': {
+                "aV": "Phase A Voltage", "aA": "Phase A Current", "aW": "Phase A Power", "aF": "Phase A Frequency",
+                "bV": "Phase B Voltage", "bA": "Phase B Current", "bW": "Phase B Power", "bF": "Phase B Frequency",
+                "cV": "Phase C Voltage", "cA": "Phase C Current", "cW": "Phase C Power", "cF": "Phase C Frequency",
+                "p1V": "PV1 Voltage", "p1A": "PV1 Current", "p1W": "MPPT1 Power",
+                "p2V": "PV2 Voltage", "p2A": "PV2 Current", "p2W": "MPPT2 Power",
+                "p3V": "PV3 Voltage", "p3A": "PV3 Current", "p3W": "MPPT3 Power",
+                "iT": "Inner Temperature", "mC": "Inverter Mode", "eC": "Error Code",
+                "tE": "Total Energy", "tG": "Total Generation Time", "tdE": "Today Energy",
+                "acW": "Active Power", "acVar": "Reactive Power", "tdPW": "Today Peak Power", "PF": "Power Factor",
+                "dV": "PV4 Voltage", "dA": "PV4 Current", "dW": "MPPT4 Power"
+            }
+        };
+
+        // ============ STATE ============
+        const state = {
+            assets: [],
+            tree: null,
+            assetMap: new Map(),
+            selectedInverters: new Set(),
+            cachedTimeseries: new Map(),
+            currentInverters: [],
+            expandedNodes: new Set(),
+            fetchQueue: [],
+            isProcessingQueue: false
+        };
+
+        // ============ API CONFIG ============
+        const API = {
+            assetList: '/api/assetList/',
+            inverterTimeseries: '/api/inverterTimeseries/'
+        };
+
+        // ============ DOM REFS ============
+        const dom = {
+            sidebar: document.getElementById('sidebar'),
+            mobileToggle: document.getElementById('mobileToggle'),
+            assetTree: document.getElementById('assetTree'),
+            searchInput: document.getElementById('searchInput'),
+            inverterGrid: document.getElementById('inverterGrid'),
+            datapointsSection: document.getElementById('datapointsSection'),
+            datapointsContainer: document.getElementById('datapointsContainer'),
+            emptyState: document.getElementById('emptyState'),
+            loadingState: document.getElementById('loadingState'),
+            selectionBar: document.getElementById('selectionBar'),
+            selectionHeader: document.getElementById('selectionHeader'),
+            selectionDropdown: document.getElementById('selectionDropdown'),
+            selectedCount: document.getElementById('selectedCount'),
+            datapointCount: document.getElementById('datapointCount'),
+            breadcrumb: document.getElementById('breadcrumb'),
+            pageTitle: document.getElementById('pageTitle'),
+            clearSelectionBtn: document.getElementById('clearSelectionBtn'),
+            queueStatus: document.getElementById('queueStatus')
+        };
+
+        // ============ INIT ============
+        function init() {
+            bindEvents();
+            fetchAssets();
+        }
+
+        function bindEvents() {
+            dom.mobileToggle.addEventListener('click', () => dom.sidebar.classList.toggle('open'));
+            dom.searchInput.addEventListener('input', debounce(handleSearch, 300));
+            dom.clearSelectionBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); 
+                clearSelection();
+            });
+            
+            // Toggle selection dropdown
+            dom.selectionHeader.addEventListener('click', () => {
+                dom.selectionDropdown.classList.toggle('open');
+            });
+            
+            // Close dropdown if clicking outside
+            document.addEventListener('click', (e) => {
+                if (!dom.selectionBar.contains(e.target)) {
+                    dom.selectionDropdown.classList.remove('open');
+                }
+            });
+        }
+
+        // ============ API CALLS ============
+        async function fetchAssets() {
+            showState('loading');
+            try {
+                const response = await fetch(API.assetList);
+                const result = await response.json();
+                state.assets = result.data || [];
+                buildAssetTree();
+                renderTree();
+                showState('empty');
+            } catch (error) {
+                console.error('Failed to fetch assets:', error);
+                dom.assetTree.innerHTML = `
+                    <div class="p-6 text-center">
+                        <p class="text-[var(--danger)] mb-3">Failed to load assets</p>
+                        <button onclick="fetchAssets()" class="text-sm text-[var(--accent)] hover:underline">Retry</button>
+                    </div>`;
+                showState('empty');
+            }
+        }
+
+        async function fetchTimeseriesForAsset(assetId) {
+            if (state.cachedTimeseries.has(assetId)) {
+                return state.cachedTimeseries.get(assetId);
+            }
+
+            const cardEl = document.querySelector(`.inverter-card[data-asset-id="${assetId}"]`);
+            if(cardEl) cardEl.classList.add('loading');
+
+            try {
+                const response = await fetch(`${API.inverterTimeseries}?assetId=${assetId}`);
+                const result = await response.json();
+                const data = result.data || [];
+                state.cachedTimeseries.set(assetId, data);
+                return data;
+            } catch (error) {
+                console.error(`Failed to fetch timeseries for ${assetId}:`, error);
+                return [];
+            } finally {
+                if(cardEl) cardEl.classList.remove('loading');
+            }
+        }
+
+        // ============ QUEUE PROCESSING ============
+        async function processQueue() {
+            if (state.isProcessingQueue) return;
+            
+            if (state.fetchQueue.length === 0) {
+                dom.queueStatus.classList.add('hidden');
+                dom.queueStatus.classList.remove('flex');
+                return;
+            }
+
+            state.isProcessingQueue = true;
+            dom.queueStatus.classList.remove('hidden');
+            dom.queueStatus.classList.add('flex');
+
+            const assetId = state.fetchQueue.shift();
+            
+            try {
+                const data = await fetchTimeseriesForAsset(assetId);
+                const inverter = state.assetMap.get(assetId);
+                const inverterName = inverter ? inverter.name.split('.').pop() : String(assetId);
+                const inverterMake = inverter?.metadata?.make || 'thea'; 
+                
+                // Only render if still selected
+                if (state.selectedInverters.has(assetId)) {
+                    renderDatapoints(data, inverterName, assetId, inverterMake);
+                }
+            } catch (err) {
+                console.error("Queue processing error", err);
+            } finally {
+                state.isProcessingQueue = false;
+                processQueue();
+            }
+        }
+
+        function addToQueue(assetId) {
+            if (!state.fetchQueue.includes(assetId)) {
+                state.fetchQueue.push(assetId);
+                processQueue();
+            }
+        }
+
+        // ============ TREE BUILDING ============
+        function buildAssetTree() {
+            state.assetMap.clear();
+            state.assets.forEach(asset => state.assetMap.set(asset.id, { ...asset, children: [] }));
+            state.assets.forEach(asset => {
+                if (asset.parentId && state.assetMap.has(asset.parentId)) {
+                    const parent = state.assetMap.get(asset.parentId);
+                    const child = state.assetMap.get(asset.id);
+                    parent.children.push(child);
+                    child.parent = parent; 
+                }
+            });
+
+            state.assetMap.forEach(node => {
+                node.children.sort((a, b) => {
+                    const order = { site: 0, inverter: 1 };
+                    return (order[a.metadata?.level] ?? 2) - (order[b.metadata?.level] ?? 2);
+                });
+            });
+
+            const rootAsset = state.assets.find(a => a.metadata?.level === 'root');
+            if (rootAsset) state.tree = state.assetMap.get(rootAsset.id);
+        }
+
+        // ============ RENDERING ============
+        function renderTree() {
+            if (!state.tree) return;
+            dom.assetTree.innerHTML = '';
+            renderNode(state.tree, dom.assetTree, 0);
+        }
+
+        function countAllDescendants(node) {
+            if (!node.children || node.children.length === 0) return 0;
+            let count = node.children.length;
+            node.children.forEach(child => count += countAllDescendants(child));
+            return count;
+        }
+
+        function renderNode(node, container, depth) {
+            const level = node.metadata?.level || 'unknown';
+            const hasChildren = node.children && node.children.length > 0;
+            const label = node.name.split('.').pop();
+            const isExpanded = state.expandedNodes.has(node.id);
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'tree-node-wrapper';
+            wrapper.dataset.id = node.id;
+            wrapper.dataset.name = node.name;
+            wrapper.dataset.level = level;
+
+            const iconHtml = getLevelIcon(level);
+            const chevronHtml = hasChildren
+                ? `<svg class="chevron-icon ${isExpanded ? 'rotated' : ''}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>`
+                : '<span class="w-3.5"></span>';
+
+            let countBadge = '';
+            if (hasChildren) {
+                if (level === 'root') {
+                    const total = countAllDescendants(node);
+                    countBadge = `<span class="text-xs text-[var(--fg-muted)] mono">${total} assets</span>`;
+                } else {
+                    countBadge = `<span class="text-xs text-[var(--fg-muted)] mono">${node.children.length}</span>`;
+                }
+            }
+
+            wrapper.innerHTML = `
+                <div class="tree-node flex items-center gap-2 level-${level}" data-id="${node.id}" data-level="${level}">
+                    ${chevronHtml}${iconHtml}
+                    <span class="flex-1 truncate text-sm">${label}</span>
+                    ${countBadge}
+                </div>
+                <div class="tree-children ${isExpanded ? 'expanded' : ''}" data-parent-id="${node.id}"></div>`;
+
+            container.appendChild(wrapper);
+
+            const nodeEl = wrapper.querySelector('.tree-node');
+            nodeEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleNodeClick(node, wrapper);
+            });
+
+            if (hasChildren) {
+                const childContainer = wrapper.querySelector('.tree-children');
+                node.children.forEach(child => renderNode(child, childContainer, depth + 1));
+            }
+        }
+
+        function getLevelIcon(level) {
+            const icons = {
+                root: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/></svg>`,
+                site: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
+                inverter: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--fg-muted)" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>`
+            };
+            return icons[level] || icons.inverter;
+        }
+
+        function getBreadcrumbs(node) {
+            const path = [];
+            let current = node;
+            while (current) {
+                path.unshift({ name: current.name.split('.').pop(), id: current.id, level: current.metadata?.level });
+                current = current.parent;
+            }
+            return path;
+        }
+
+        function handleNodeClick(node, wrapper) {
+            const level = node.metadata?.level;
+            const hasChildren = node.children && node.children.length > 0;
+
+            if (hasChildren) {
+                const childContainer = wrapper.querySelector('.tree-children');
+                const chevron = wrapper.querySelector('.chevron-icon');
+                if (state.expandedNodes.has(node.id)) {
+                    state.expandedNodes.delete(node.id);
+                    childContainer.classList.remove('expanded');
+                    chevron.classList.remove('rotated');
+                } else {
+                    state.expandedNodes.add(node.id);
+                    childContainer.classList.add('expanded');
+                    chevron.classList.add('rotated');
+                }
+            }
+
+            document.querySelectorAll('.tree-node.selected').forEach(el => el.classList.remove('selected'));
+            wrapper.querySelector('.tree-node').classList.add('selected');
+
+            let inverters = [];
+            if (level === 'inverter') inverters = [node];
+            else if (level === 'site') inverters = node.children?.filter(c => c.metadata?.level === 'inverter') || [];
+            else if (level === 'root') {
+                const sites = node.children?.filter(c => c.metadata?.level === 'site') || [];
+                sites.forEach(site => {
+                    const siteInverters = site.children?.filter(c => c.metadata?.level === 'inverter') || [];
+                    inverters.push(...siteInverters);
+                });
+            }
+
+            state.currentInverters = inverters;
+            renderInverterCards(inverters);
+            
+            const breadcrumbs = getBreadcrumbs(node);
+            updateNavbar(breadcrumbs);
+
+            showState('content');
+
+            if (window.innerWidth <= 1024) dom.sidebar.classList.remove('open');
+        }
+
+        function updateNavbar(breadcrumbs) {
+            dom.pageTitle.textContent = breadcrumbs.map(b => b.name).join(' / ');
+            
+            if (breadcrumbs.length > 0) {
+                dom.breadcrumb.classList.remove('hidden');
+                dom.breadcrumb.innerHTML = breadcrumbs.map((b, i) => {
+                    const isLast = i === breadcrumbs.length - 1;
+                    return `<span class="${isLast ? 'active' : ''}">${b.name}</span>${!isLast ? '<span class="opacity-50">/</span>' : ''}`;
+                }).join('');
+            } else {
+                dom.breadcrumb.classList.add('hidden');
+            }
+        }
+
+        function renderInverterCards(inverters) {
+            dom.inverterGrid.innerHTML = '';
+            
+            if (state.selectedInverters.size > 0) {
+                dom.datapointsSection.classList.remove('hidden');
+            }
+
+            if (inverters.length === 0) {
+                dom.inverterGrid.innerHTML = `<div class="col-span-full text-center py-12 text-[var(--fg-muted)]">No inverters found</div>`;
+                return;
+            }
+
+            inverters.forEach((inv, idx) => {
+                const card = createInverterCard(inv, idx);
+                dom.inverterGrid.appendChild(card);
+            });
+            updateSelectionUI();
+        }
+
+        function createInverterCard(inverter, index) {
+            const card = document.createElement('div');
+            card.className = 'inverter-card';
+            card.style.animationDelay = `${index * 40}ms`;
+            card.dataset.assetId = inverter.id;
+
+            const name = inverter.name.split('.').pop();
+            const isSelected = state.selectedInverters.has(inverter.id);
+            if (isSelected) card.classList.add('selected');
+
+            card.innerHTML = `
+                <div class="relative z-10">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="custom-checkbox ${isSelected ? 'checked' : ''}">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--bg)" stroke-width="3">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <h4 class="font-bold text-base mb-1 mono truncate" title="Asset ID">${inverter.id}</h4>
+                    <p class="text-xs text-[var(--fg-muted)] mb-3 truncate" title="${name}">${name}</p>
+                    
+                    <div class="space-y-1 text-xs">
+                        <div class="flex justify-between">
+                            <span class="text-[var(--fg-muted)]">Make</span>
+                            <span>${inverter.metadata?.make || 'N/A'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-[var(--fg-muted)]">Rating</span>
+                            <span class="text-[var(--accent)] font-medium">${inverter.metadata?.rating_kw || 'N/A'} kW</span>
+                        </div>
+                    </div>
+                </div>`;
+
+            card.addEventListener('click', () => toggleInverterSelection(inverter.id, card));
+            return card;
+        }
+
+        function toggleInverterSelection(assetId, card) {
+            const checkbox = card.querySelector('.custom-checkbox');
+
+            if (state.selectedInverters.has(assetId)) {
+                state.selectedInverters.delete(assetId);
+                card.classList.remove('selected');
+                checkbox.classList.remove('checked');
+                
+                const sectionToRemove = document.querySelector(`.inverter-data-section[data-asset-id="${assetId}"]`);
+                if (sectionToRemove) {
+                    sectionToRemove.remove();
+                }
+                
+                updateDatapointCount();
+                
+                if (state.selectedInverters.size === 0) {
+                    dom.datapointsSection.classList.add('hidden');
+                }
+
+            } else {
+                state.selectedInverters.add(assetId);
+                card.classList.add('selected');
+                checkbox.classList.add('checked');
+                addToQueue(assetId);
+            }
+
+            updateSelectionUI();
+        }
+
+        function updateSelectionUI() {
+            const count = state.selectedInverters.size;
+            if (count > 0) {
+                dom.selectionBar.classList.remove('hidden');
+                dom.selectedCount.textContent = `${count} selected`;
+                
+                // Update dropdown list
+                dom.selectionDropdown.innerHTML = '';
+                state.selectedInverters.forEach(id => {
+                    const asset = state.assetMap.get(id);
+                    const name = asset ? asset.name.split('.').pop() : id;
+                    
+                    const item = document.createElement('div');
+                    item.className = 'selection-item';
+                    item.innerHTML = `
+                        <div>
+                            <span class="text-xs text-[var(--fg-muted)] mono">${id}</span>
+                            <span class="text-sm ml-2">${name}</span>
+                        </div>
+                        <button class="remove-selection-btn" data-id="${id}">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                    `;
+                    
+                    item.querySelector('.remove-selection-btn').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const idToRemove = e.currentTarget.dataset.id;
+                        
+                        // Remove from state
+                        state.selectedInverters.delete(idToRemove);
+                        
+                        // Remove from DOM
+                        const sectionToRemove = document.querySelector(`.inverter-data-section[data-asset-id="${idToRemove}"]`);
+                        if (sectionToRemove) sectionToRemove.remove();
+                        
+                        const cardToUncheck = document.querySelector(`.inverter-card[data-asset-id="${idToRemove}"]`);
+                        if (cardToUncheck) {
+                            cardToUncheck.classList.remove('selected');
+                            cardToUncheck.querySelector('.custom-checkbox').classList.remove('checked');
+                        }
+                        
+                        updateSelectionUI();
+                        updateDatapointCount();
+                        
+                        if (state.selectedInverters.size === 0) {
+                            dom.datapointsSection.classList.add('hidden');
+                        }
+                    });
+                    
+                    dom.selectionDropdown.appendChild(item);
+                });
+                
+            } else {
+                dom.selectionBar.classList.add('hidden');
+                dom.selectionDropdown.classList.remove('open');
+            }
+        }
+        
+        function updateDatapointCount() {
+            const count = document.querySelectorAll('.datapoint-card').length;
+            dom.datapointCount.textContent = `${count} points`;
+        }
+
+        function clearSelection() {
+            state.selectedInverters.clear();
+            state.fetchQueue = [];
+            
+            document.querySelectorAll('.inverter-card.selected').forEach(card => {
+                card.classList.remove('selected');
+                card.querySelector('.custom-checkbox').classList.remove('checked');
+            });
+
+            updateSelectionUI();
+            dom.datapointsSection.classList.add('hidden');
+            dom.datapointsContainer.innerHTML = '';
+        }
+
+        // ============ DATAPOINTS RENDERING WITH MAPPING ============
+        function renderDatapoints(datapoints, inverterName, assetId, make) {
+            dom.datapointsSection.classList.remove('hidden');
+            
+            let section = dom.datapointsContainer.querySelector(`.inverter-data-section[data-asset-id="${assetId}"]`);
+            
+            if (section) {
+                section.innerHTML = '';
+            } else {
+                section = document.createElement('div');
+                section.className = 'inverter-data-section';
+                section.dataset.assetId = assetId;
+                dom.datapointsContainer.appendChild(section);
+            }
+
+            // Select dictionary based on make (case-insensitive)
+            const makeKey = (make || '').toLowerCase();
+            let dictionary = FIELD_MAPPINGS['thea']; // Default
+            if (FIELD_MAPPINGS[makeKey]) {
+                dictionary = FIELD_MAPPINGS[makeKey];
+            }
+
+            // Header for the section
+            const header = document.createElement('div');
+            header.className = 'section-header';
+            header.innerHTML = `
+                <div class="w-2 h-2 rounded-full bg-[var(--accent)]"></div>
+                <h4 class="text-sm font-semibold mono">${inverterName} <span class="text-[var(--fg-muted)] font-normal">(ID: ${assetId})</span></h4>
+                <div class="section-line"></div>
+                <span class="text-xs text-[var(--fg-muted)]">${datapoints.length} points</span>
+            `;
+            section.appendChild(header);
+
+            // Grid for cards
+            const localGrid = document.createElement('div');
+            localGrid.className = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3';
+            section.appendChild(localGrid);
+
+            // Render cards
+            datapoints.forEach((dp, idx) => {
+                const card = document.createElement('div');
+                card.className = 'datapoint-card';
+                card.style.animationDelay = `${idx * 10}ms`;
+
+                const rawKey = dp.name.split('.').pop();
+                // Use dictionary for display name, fallback to raw key
+                const displayName = dictionary[rawKey] || rawKey;
+
+                const hasData = dp.last_datapoint && dp.last_datapoint.value !== null;
+                if (hasData) card.classList.add('has-data');
+
+                const value = hasData ? formatValue(dp.last_datapoint.value) : 'N/A';
+                const timestamp = hasData ? dp.last_datapoint.timestamp : 'No data';
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] font-semibold text-[var(--accent)] mono uppercase tracking-wider">${displayName}</span>
+                        ${hasData ? '<span class="w-1.5 h-1.5 bg-[var(--accent)] rounded-full"></span>' : ''}
+                    </div>
+                    <div class="text-xl font-bold ${hasData ? '' : 'text-[var(--fg-muted)]'} mb-1">${value}</div>
+                    <div class="text-[10px] text-[var(--fg-muted)] mono">${timestamp}</div>`;
+                
+                localGrid.appendChild(card);
+            });
+
+            updateDatapointCount();
+        }
+
+        function formatValue(val) {
+            if (typeof val !== 'number') return val;
+            if (Math.abs(val) >= 1000000) return (val / 1000000).toFixed(2) + 'M';
+            if (Math.abs(val) >= 1000) return (val / 1000).toFixed(2) + 'K';
+            if (Number.isInteger(val)) return val.toString();
+            return val.toFixed(2);
+        }
+
+        // ============ SEARCH LOGIC ============
+        function handleSearch(e) {
+            const query = e.target.value.toLowerCase().trim();
+            
+            if (!query) {
+                document.querySelectorAll('.tree-node-wrapper').forEach(el => el.classList.remove('hidden-node'));
+                return;
+            }
+
+            document.querySelectorAll('.tree-node-wrapper').forEach(wrapper => {
+                const name = (wrapper.dataset.name || '').toLowerCase();
+                const id = (wrapper.dataset.id || '').toLowerCase();
+                const isMatch = name.includes(query) || id.includes(query);
+                
+                if (isMatch) {
+                    wrapper.classList.remove('hidden-node');
+                    let parent = wrapper.parentElement.closest('.tree-node-wrapper');
+                    while (parent) {
+                        parent.classList.remove('hidden-node');
+                        const childContainer = parent.querySelector('.tree-children');
+                        const chevron = parent.querySelector('.chevron-icon');
+                        if (childContainer) childContainer.classList.add('expanded');
+                        if (chevron) chevron.classList.add('rotated');
+                        parent = parent.parentElement.closest('.tree-node-wrapper');
+                    }
+                } else {
+                    wrapper.classList.add('hidden-node');
+                }
+            });
+            
+            document.querySelectorAll('.tree-node-wrapper').forEach(wrapper => {
+                 const name = (wrapper.dataset.name || '').toLowerCase();
+                 const id = (wrapper.dataset.id || '').toLowerCase();
+                 const isMatch = name.includes(query) || id.includes(query);
+                 
+                 if (isMatch) {
+                     let el = wrapper;
+                     while(el) {
+                         el.classList.remove('hidden-node');
+                         el = el.parentElement.closest('.tree-node-wrapper');
+                     }
+                 }
+            });
+        }
+
+        // ============ STATE MANAGEMENT ============
+        function showState(stateName) {
+            dom.loadingState.classList.add('hidden');
+            dom.emptyState.classList.add('hidden');
+            if (stateName === 'loading') {
+                dom.inverterGrid.innerHTML = '';
+                dom.loadingState.classList.remove('hidden');
+            }
+            else if (stateName === 'empty') {
+                dom.inverterGrid.innerHTML = '';
+                dom.emptyState.classList.remove('hidden');
+            }
+        }
+
+        // ============ UTILITIES ============
+        function debounce(fn, delay) {
+            let timeout;
+            return (...args) => {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => fn.apply(this, args), delay);
+            };
+        }
+
+        // ============ START ============
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
