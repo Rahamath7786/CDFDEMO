@@ -20,3 +20,10 @@ config = ClientConfig(
 )
 
 client = CogniteClient(config)
+
+
+
+
+
+
+

@@ -117,6 +117,60 @@ from cdfapp.cdfClient import client
 
 
    
+# def inverterTimeseries(request):
+#     try:
+#         assetId = request.GET.get("assetId")
+#         if not assetId:
+#             return JsonResponse({"error": "assetId is required"}, status=400)
+
+#         assetId = int(assetId)
+#         asset = client.assets.retrieve(id=assetId)
+#         assetMake=asset.metadata["make"]
+#         # print(assetMake)
+#         # print("Metadata:", asset.metadata)
+
+#         ts_list = timeseriesByAssetId(assetId)
+
+#         external_ids = [ts.external_id for ts in ts_list]
+
+
+#         # SINGLE API CALL
+#         latest_data = getLatestDatapointsBulk(external_ids)
+
+#         # Map for fast lookup
+#         dp_map = {dp.external_id: dp for dp in latest_data}
+#         result = []
+#         for ts in ts_list:
+#             dp = dp_map.get(ts.external_id)
+
+
+#             if dp and dp.value not in [0, None]:
+#                 last_dp = {
+#                     "timestamp": convertUtcToIst(dp.timestamp),
+#                     "value": dp.value
+#                 }
+#             else:
+#                 last_dp = None
+
+#             result.append({
+#                 "externalId": ts.external_id,
+#                 "name": ts.name,
+#                 "last_datapoint": last_dp
+#             })
+
+#         return JsonResponse({
+#             "count": len(result),
+#             "data": result
+#         })
+
+#     except Exception as e:
+#         return JsonResponse({"error": str(e)}, status=500)
+
+from datetime import datetime
+import pytz
+
+IST = pytz.timezone("Asia/Kolkata")
+
 def inverterTimeseries(request):
     try:
         assetId = request.GET.get("assetId")
@@ -125,28 +179,24 @@ def inverterTimeseries(request):
 
         assetId = int(assetId)
         asset = client.assets.retrieve(id=assetId)
-        assetMake=asset.metadata["make"]
-        # print(assetMake)
-        # print("Metadata:", asset.metadata)
 
         ts_list = timeseriesByAssetId(assetId)
-
         external_ids = [ts.external_id for ts in ts_list]
 
-
-        # SINGLE API CALL
+        # ✅ SINGLE API CALL
         latest_data = getLatestDatapointsBulk(external_ids)
 
-        # Map for fast lookup
         dp_map = {dp.external_id: dp for dp in latest_data}
+
         result = []
+
         for ts in ts_list:
             dp = dp_map.get(ts.external_id)
 
-
             if dp and dp.value not in [0, None]:
                 last_dp = {
-                    "timestamp": convertUtcToIst(dp.timestamp),
+                    # 🔥 FIX HERE
+                    "timestamp": dp.timestamp.astimezone(IST).strftime("%d/%m/%Y %H:%M:%S"),
                     "value": dp.value
                 }
             else:
@@ -165,8 +215,6 @@ def inverterTimeseries(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
-
-
 
 
 # =======================================================================================

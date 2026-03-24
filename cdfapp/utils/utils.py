@@ -44,7 +44,7 @@ def convertIstToUtcMs(dateStr):
 #     return int(startUtc.timestamp() * 1000), int(endUtc.timestamp() * 1000)
 
 
-# def convertUtcToIsts(dt):
+# def convertUtcToIstnew(dt):
 #     if not dt:
 #         return None
 
