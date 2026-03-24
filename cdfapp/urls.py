@@ -9,6 +9,10 @@ urlpatterns = [
     path('assets/', views.getAssets, name='getAssets'),
     path('assetList/', views.assetsList, name='assetsList'),
     path('inverterTimeseries/', views.inverterTimeseries, name='inverter_timeseries'),
+    path('timeseriesGraph/', views.energyData, name='timeseriesGraph'),
+    path('powerDataCDF/', views.powerDataCDF, name='powerDataCDF'),
+
+
 
     path('dashboard/', views.dashboard, name='dashboard'),
 ]
