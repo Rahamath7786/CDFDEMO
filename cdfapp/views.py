@@ -182,8 +182,6 @@ def inverterTimeseries(request):
 
         ts_list = timeseriesByAssetId(assetId)
         external_ids = [ts.external_id for ts in ts_list]
-
-        # ✅ SINGLE API CALL
         latest_data = getLatestDatapointsBulk(external_ids)
 
         dp_map = {dp.external_id: dp for dp in latest_data}
@@ -195,7 +193,7 @@ def inverterTimeseries(request):
 
             if dp and dp.value not in [0, None]:
                 last_dp = {
-                    # 🔥 FIX HERE
+                
                     "timestamp": dp.timestamp.astimezone(IST).strftime("%d/%m/%Y %H:%M:%S"),
                     "value": dp.value
                 }
@@ -241,7 +239,7 @@ def energyData(request):
         externalId = request.GET.get("externalId")
         startDate = request.GET.get("startDate")
         endDate = request.GET.get("endDate")
-        interval = request.GET.get("interval")  # ✅ no default hardcode
+        interval = request.GET.get("interval") 
         dateStr = request.GET.get("date")
 
         if not externalId:
